@@ -1,0 +1,8 @@
+# Spring Boot config
+src/main/resources/application.properties
+
+# Project exclude paths
+/.gradle/
+/build/
+/build/classes/java/main/
+/build/classes/java/test/
