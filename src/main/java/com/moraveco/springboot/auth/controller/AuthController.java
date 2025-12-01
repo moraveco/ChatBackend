@@ -1,11 +1,13 @@
 package com.moraveco.springboot.auth.controller;
 
+import com.moraveco.springboot.account.service.PasswordResetService;
 import com.moraveco.springboot.auth.entity.*;
 import com.moraveco.springboot.auth.repository.LoginRepository;
 import com.moraveco.springboot.auth.repository.PasswordResetTokenRepository;
 import com.moraveco.springboot.auth.repository.UserRepository;
 import com.moraveco.springboot.auth.repository.VerificationTokenRepository;
 import com.moraveco.springboot.auth.service.EmailVerificationService;
+import com.moraveco.springboot.util.JwtUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -35,6 +37,13 @@ public class AuthController {
 
     @Autowired
     private EmailVerificationService emailService;
+
+    @Autowired
+    private JwtUtils jwtUtils;
+
+
+    @Autowired
+    private PasswordResetService passwordResetService; // NEW
 
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
@@ -103,11 +112,7 @@ public class AuthController {
     public ResponseEntity<?> login(@RequestBody Login loginRequest) {
         Login stored = loginRepository.findByEmail(loginRequest.getEmail()).orElse(null);
 
-        if (stored == null) {
-            return ResponseEntity.badRequest().body("Invalid email or password");
-        }
-
-        if (!passwordEncoder.matches(loginRequest.getPassword(), stored.getPassword())) {
+        if (stored == null || !passwordEncoder.matches(loginRequest.getPassword(), stored.getPassword())) {
             return ResponseEntity.badRequest().body("Invalid email or password");
         }
 
@@ -115,11 +120,14 @@ public class AuthController {
             return ResponseEntity.badRequest().body("Please verify your email before logging in");
         }
 
-        // Get user details
         User user = userRepository.findUserById(stored.getId()).orElse(null);
+
+        // GENERATE TOKEN
+        String token = jwtUtils.generateToken(stored.getId());
 
         Map<String, Object> response = new HashMap<>();
         response.put("message", "Login successful");
+        response.put("token", token); // <--- Send the token!
         response.put("userId", stored.getId());
         response.put("email", stored.getEmail());
         if (user != null) {
@@ -133,27 +141,8 @@ public class AuthController {
 
     @PostMapping("/forgot-password")
     public ResponseEntity<?> forgotPassword(@RequestBody Map<String, String> request) {
-        String email = request.get("email");
-
-        Login user = loginRepository.findByEmail(email).orElse(null);
-
-        if (user == null) {
-            // Don't reveal if email exists for security
-            return ResponseEntity.ok("If the email exists, a password reset link has been sent");
-        }
-
-        // Delete any existing reset tokens for this user
-        resetRepository.deleteByUserId(user.getId());
-
-        String token = UUID.randomUUID().toString();
-        PasswordResetToken resetToken = new PasswordResetToken();
-        resetToken.setToken(token);
-        resetToken.setUser(user);
-        resetRepository.save(resetToken);
-
-        emailService.sendPasswordResetEmail(user, token);
-
-        return ResponseEntity.ok("If the email exists, a password reset link has been sent");
+        String result = passwordResetService.requestPasswordReset(request.get("email"));
+        return ResponseEntity.ok(result);
     }
 
     @PostMapping("/reset-password")
@@ -162,28 +151,15 @@ public class AuthController {
         String newPassword = request.get("newPassword");
 
         if (newPassword == null || newPassword.length() < 6) {
-            return ResponseEntity.badRequest().body("Password must be at least 6 characters long");
+            return ResponseEntity.badRequest().body("Password too short");
         }
 
-        PasswordResetToken resetToken = resetRepository
-                .findByToken(token)
-                .orElse(null);
-
-        if (resetToken == null) {
-            return ResponseEntity.badRequest().body("Invalid password reset token");
+        boolean success = passwordResetService.resetPassword(token, newPassword);
+        if (success) {
+            return ResponseEntity.ok("Password reset successful.");
+        } else {
+            return ResponseEntity.badRequest().body("Invalid or expired token.");
         }
-
-        if (resetToken.getExpiryDate().isBefore(LocalDateTime.now())) {
-            return ResponseEntity.badRequest().body("Password reset token has expired");
-        }
-
-        Login user = resetToken.getUser();
-        user.setPassword(passwordEncoder.encode(newPassword));
-        loginRepository.save(user);
-
-        resetRepository.delete(resetToken);
-
-        return ResponseEntity.ok("Password reset successful! You can now log in with your new password.");
     }
 
     @PostMapping("/resend-verification")

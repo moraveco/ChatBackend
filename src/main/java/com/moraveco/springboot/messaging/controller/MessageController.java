@@ -1,5 +1,6 @@
 package com.moraveco.springboot.messaging.controller;
 
+import com.moraveco.springboot.messaging.service.SearchService;
 import com.moraveco.springboot.storage.controller.FileController;
 import com.moraveco.springboot.messaging.entity.ChatMessage;
 import com.moraveco.springboot.messaging.entity.ReadReceiptMessage;
@@ -36,13 +37,15 @@ public class MessageController {
     private final MessageRepository chatMessageRepository;
     private final FileController fileController;
     private final SimpMessagingTemplate messagingTemplate;
+    private final SearchService searchService;         // NEW
     private final Map<String, Long> typingUsers = new ConcurrentHashMap<>();
     private static final Logger log = LoggerFactory.getLogger(MessageController.class);
 
-    public MessageController(MessageRepository chatMessageRepository, FileController fileController, SimpMessagingTemplate messagingTemplate) {
+    public MessageController(MessageRepository chatMessageRepository, FileController fileController, SimpMessagingTemplate messagingTemplate, SearchService searchService) {
         this.chatMessageRepository = chatMessageRepository;
         this.fileController = fileController;
         this.messagingTemplate = messagingTemplate;
+        this.searchService = searchService;
 
         // Create upload directory if it doesn't exist
         try {
@@ -233,6 +236,16 @@ public class MessageController {
         );
     }
 
+    @GetMapping("/search")
+    public ResponseEntity<List<ChatMessage>> searchConversation(
+            @RequestParam String senderId,
+            @RequestParam String receiverId,
+            @RequestParam String query) {
+        return ResponseEntity.ok(searchService.searchMessagesInConversation(senderId, receiverId, query));
+    }
+
+
+
     // Scheduled task to clear stale typing indicators
     @Scheduled(fixedRate = 3000)
     public void clearStaleTypingIndicators() {
@@ -258,6 +271,8 @@ public class MessageController {
         }
         return ResponseEntity.ok().build();
     }
+
+
 
     // REST endpoint to get unread message count
     @GetMapping("/unreadCount")

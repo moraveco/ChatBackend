@@ -1,6 +1,7 @@
 package com.moraveco.springboot.account.controller;
 
 import com.moraveco.springboot.account.entity.BlockedUser;
+import com.moraveco.springboot.account.service.DeleteAccountService;
 import com.moraveco.springboot.auth.entity.User;
 import com.moraveco.springboot.account.service.UserService;
 import org.slf4j.Logger;
@@ -31,9 +32,12 @@ public class UserController {
     private static final String PROFILE_UPLOAD_DIR = SHARED_ROOT + "/uploads/profiles/";
     private static final Logger log = LoggerFactory.getLogger(UserController.class);
 
+    private final DeleteAccountService deleteAccountService; // NEW
 
-    public UserController(UserService userService) {
+
+    public UserController(UserService userService, DeleteAccountService deleteAccountService) {
         this.userService = userService;
+        this.deleteAccountService = deleteAccountService;
 
         // Create upload directory if it doesn't exist
         try {
@@ -78,6 +82,16 @@ public class UserController {
         return userService.getUserById(id)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteUser(@PathVariable String id) {
+        try {
+            deleteAccountService.deleteUserAccount(id); // Uses the service now
+            return ResponseEntity.noContent().build();
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
     }
 
     /**
@@ -258,17 +272,6 @@ public class UserController {
         } catch (Exception e) {
             e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
-    }
-
-    @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteUser(@PathVariable String id) {
-        try {
-            userService.deleteUser(Long.parseLong(id));
-            return ResponseEntity.noContent().build();
-        } catch (NumberFormatException e) {
-            // If ID is UUID string, try different approach
-            return ResponseEntity.badRequest().build();
         }
     }
 

@@ -32,6 +32,11 @@ public interface MessageRepository extends JpaRepository<ChatMessage, Long> {
             Pageable pageable
     );
 
+
+    // Add this inside the interface
+    @Query(value = "SELECT * FROM messages WHERE (sender_uid = :uid1 AND receiver_uid = :uid2 OR sender_uid = :uid2 AND receiver_uid = :uid1) AND content LIKE CONCAT('%', :query, '%') ORDER BY timestamp DESC", nativeQuery = true)
+    List<ChatMessage> searchMessages(@Param("uid1") String uid1, @Param("uid2") String uid2, @Param("query") String query);
+
     @Transactional
     @Modifying
     @Query(value = "INSERT INTO ChatMessages (id, sender_uid, receiver_uid, content, timestamp, `read`, respond_message_id, image_url) " +
